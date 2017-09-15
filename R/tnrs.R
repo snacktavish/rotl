@@ -1,3 +1,5 @@
+max_tnrs_req <- 2
+
 
 ##' Match taxonomic names to the Open Tree Taxonomy.
 ##'
@@ -78,47 +80,70 @@ tnrs_match_names <- function(names = NULL, context_name = NULL,
         names <- unique(names)
     }
 
-    res <- .tnrs_match_names(names = names, context_name = context_name,
-                             do_approximate_matching = do_approximate_matching,
-                             ids = ids, include_suppressed = include_suppressed,
-                             ...)
+    names <- split_by_n(names, max_tnrs_req)
+    names(names) <- paste0("req", seq_along(names))
 
-    check_tnrs(res)
-    match_ids <- lowest_ott_id(res)
-    if (!identical(length(res[["results"]]), length(match_ids)))
-        stop("The number of matches and the number of 'results' elements should",
-             " be the same.")
+    res <- lapply(names, function(n) {
+        .r <- .tnrs_match_names(names = n, context_name = context_name,
+                          do_approximate_matching = do_approximate_matching,
+                          ids = ids, include_suppressed = include_suppressed,
+                          ...)
+        check_tnrs(.r)
+        .r
+    })
 
-    summary_match <- mapply(
-        function(rid, mid) {
-        build_summary_match(res, res_id = rid, match_id = mid, initial_creation = TRUE)
-    }, seq_along(res[["results"]]), match_ids, SIMPLIFY = FALSE)
-    ## add taxon names with no maches
-    summary_match <- add_unmatched_names(summary_match, res)
-    summary_match <- do.call("rbind", summary_match)
+    match_ids <- lapply(res, function(.r) {
+        mid <- lowest_ott_id(.r)
+        if (!identical(length(.r[["results"]]), length(mid)))
+            stop("The number of matches and the number of 'results' elements should",
+                 " be the same.")
+        mid
+    })
 
-    summary_match$search_string <- gsub("\\\\", "", summary_match$search_string)
+    summary_match_list <- lapply(seq_along(res), function(i) {
+        .smry <- mapply(
+            function(rid, mid) {
+            build_summary_match(res[[i]], res_id = rid, match_id = mid, initial_creation = TRUE)
+        }, seq_along(res[[i]][["results"]]), match_ids[[i]], SIMPLIFY = FALSE)
 
-    ## reorder to match original query
-    match_ids <- c(match_ids, rep(NA_integer_, sum(is.na(summary_match$ott_id))))
-    ordr <- match(tolower(names), summary_match$search_string)
-    stopifnot(identical(length(match_ids), length(ordr)))
+        ## add taxon names with no maches
+        .smry <- add_unmatched_names(.smry, res)
+        .smry <- do.call("rbind", .smry)
 
-    summary_match <- summary_match[ordr, ]
-    match_ids <- match_ids[ordr]
+        .smry$search_string <- gsub("\\\\", "", .smry$search_string)
 
-    summary_match[["approximate_match"]] <-
-        convert_to_logical(summary_match[["approximate_match"]])
-    summary_match[["is_synonym"]] <-
-        convert_to_logical(summary_match[["is_synonym"]])
-    summary_match[["flags"]] <- convert_to_logical(summary_match[["flags"]])
+        ## reorder to match original query
+        match_ids[[i]] <- c(match_ids[[i]], rep(NA_integer_, sum(is.na(.smry$ott_id))))
+        ordr <- match(tolower(names[[i]]), .smry$search_string)
+        stopifnot(identical(length(match_ids[[i]]), length(ordr)))
 
-    attr(summary_match, "original_order") <- as.numeric(rownames(summary_match))
+        .smry <- .smry[ordr, ]
+        match_ids[[i]] <- match_ids[[i]][ordr]
+
+        .smry[["approximate_match"]] <-
+            convert_to_logical(.smry[["approximate_match"]])
+        .smry[["is_synonym"]] <-
+            convert_to_logical(.smry[["is_synonym"]])
+        .smry[["flags"]] <- convert_to_logical(.smry[["flags"]])
+        .smry
+    })
+
+    summary_match <- do.call("rbind", summary_match_list)
+
+    orig_order <- lapply(summary_match_list, function(smry)
+        as.numeric(rownames(smry)))
+    names(orig_order) <- names(res)
+
+    has_original_match <- lapply(summary_match_list, function(smry) {
+        !is.na(smry[["number_matches"]])
+    })
+
+    attr(summary_match, "original_order") <- orig_order
     rownames(summary_match) <- NULL
     attr(summary_match, "original_response") <- res
     attr(summary_match, "match_id") <- match_ids
-    attr(summary_match, "has_original_match") <-
-        !is.na(summary_match[["number_matches"]])
+    attr(summary_match, "has_original_match") <- has_original_match
+
     class(summary_match) <- c("match_names", "data.frame")
     summary_match
 }

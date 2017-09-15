@@ -1,8 +1,8 @@
 ## internal function that match the arguments provided to the correct
 ## row number in the data frame representing the Open Tree Taxonomy
 ## for a series of matched names.
-check_args_match_names <- function(response, row_number, taxon_name, ott_id) {
-    orig_order <- attr(response, "original_order")
+check_args_match_names <- function(response, req_number, row_number, taxon_name, ott_id) {
+    orig_order <- attr(response, "original_order")[[req_number]]
     if (is.null(orig_order)) {
         stop(sQuote(substitute(response)), " was not created using ",
              sQuote("tnrs_match_names"))
@@ -106,17 +106,23 @@ match_row_number <- function(response, row_number, taxon_name, ott_id) {
 ##' @rdname match_names
 inspect.match_names <- function(response, row_number, taxon_name, ott_id, ...) {
 
-    i <- check_args_match_names(response, row_number, taxon_name, ott_id)
     j <- match_row_number(response, row_number, taxon_name, ott_id)
+    k <- ceiling(j/max_tnrs_req)
+    i <- check_args_match_names(response, req_number = k,
+                                get_row(row_number), taxon_name, ott_id)
 
-    if (attr(response, "has_original_match")[j]) {
-        res <- attr(response, "original_response")
+    if (attr(response, "has_original_match")[[k]][get_row(j)]) {
+        res <- attr(response, "original_response")[[k]]
         summary_match <- build_summary_match(res, res_id = i, match_id = NULL,
                                              initial_creation = FALSE)
     } else {
         summary_match <- response[j, ]
     }
     summary_match
+}
+
+get_row <- function(x) {
+    ifelse(x %% max_tnrs_req == 0, max_tnrs_req, x %% max_tnrs_req)
 }
 
 ##' @export
@@ -137,12 +143,15 @@ update.match_names <- function(object, row_number, taxon_name, ott_id,
                                new_row_number, new_ott_id, ...) {
 
     response <- object
-    i <- check_args_match_names(response, row_number, taxon_name, ott_id)
     j <- match_row_number(response, row_number, taxon_name, ott_id)
+    k <- ceiling(j/max_tnrs_req)
+    i <- check_args_match_names(response, req_number = k,
+                                row_number = get_row(row_number),
+                                taxon_name = taxon_name, ott_id = ott_id)
 
-    res <- attr(response, "original_response")
+    res <- attr(response, "original_response")[[k]]
 
-    if (!attr(response, "has_original_match")[j]) {
+    if (!attr(response, "has_original_match")[[k]][get_row(j)]) {
         warning("There is no match for this name, ",
                  "so there is nothing to replace it with.")
         return(response)
@@ -179,10 +188,10 @@ update.match_names <- function(object, row_number, taxon_name, ott_id,
     }
     if (length(j) > 1) stop("You must supply a single element for each argument")
 
-    summ_match <- summary_row_factory(res, res_id = i, match_id = j)
+    summ_match <- summary_row_factory(res, res_id = i, match_id = get_row(j))
 
     response[rnb, ] <- summ_match
-    attr(response, "match_id")[rnb] <- j
+    attr(response, "match_id")[[k]][rnb] <- get_row(j)
     response
 }
 
@@ -199,16 +208,16 @@ get_list_element <- function(response, i, list_name) {
 
 match_names_method_factory <- function(list_name) {
 
-    function(tax, row_number, taxon_name, ott_id, ...) {
+    function(tax, req_number, row_number, taxon_name, ott_id, ...) {
 
         response <- tax
-        res <- attr(response, "original_response")
+        res <- attr(response, "original_response")[[req_number]]
 
         no_args <- all(c(missing(row_number), missing(taxon_name),
                          missing(ott_id)))
 
         if (no_args) {
-            res_i <- attr(response, "original_order")[attr(response, "has_original_match")]
+            res_i <- attr(response, "original_order")[[req_number]][attr(response, "has_original_match")[[req_number]]]
             ret <- lapply(res_i, function(i) {
                 get_list_element(res, i, list_name)
             })
@@ -219,15 +228,15 @@ match_names_method_factory <- function(list_name) {
             ## to extract the correct element
             ret <- mapply(function(x, i) {
                 ret[[x]][i]
-            }, seq_along(ret), attr(response, "match_id")[attr(response, "has_original_match")])
+            }, seq_along(ret), attr(response, "match_id")[[req_number]][attr(response, "has_original_match")[[req_number]]])
             if (all(sapply(ret, length) == 1)) {
                 ret <- unlist(ret, use.names = TRUE)
             }
         } else {
             i <- check_args_match_names(response, row_number, taxon_name, ott_id)
             j <- match_row_number(response, row_number, taxon_name, ott_id)
-            if (attr(response, "has_original_match")[j]) {
-                ret <- get_list_element(res, i, list_name)[attr(response, "match_id")[j]]
+            if (attr(response, "has_original_match")[[req_number]][j]) {
+                ret <- get_list_element(res, i, list_name)[attr(response, "match_id")[[req_number]][j]]
             } else {
                 ret <- list(ott_id = NA_character_,
                             name = response[["search_string"]][j],
@@ -249,7 +258,8 @@ match_names_method_factory <- function(list_name) {
 match_names_taxon_method_factory <- function(.f) {
     function(tax, row_number, taxon_name, ott_id, ...) {
         extract_tax_list <- match_names_method_factory("taxon")
-        tax_info <- extract_tax_list(tax, row_number = row_number,
+        tax_info <- extract_tax_list(tax, req_number = req_number,
+                                     row_number = row_number,
                                      taxon_name = taxon_name,
                                      ott_id = ott_id)
         res <- lapply(tax_info, function(x) .f(x))
