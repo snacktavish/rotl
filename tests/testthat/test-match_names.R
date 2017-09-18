@@ -14,25 +14,33 @@ context("check_args_match_names")
 
 
 test_that("error generated if object provided isn't created by tnrs_match_names",
-          expect_error(rotl:::check_args_match_names(letters),
+          expect_error(rotl:::check_args_match_names(letters, req_number = 1),
                        "was not created using"))
 
 test_that("error generated if no argument is provided", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1),
                  "You must specify")
+})
+
+test_that("error generated if request numbaer isn't specified.", {
+    skip_on_cran()
+    expect_error(rotl:::check_args_match_names(rsp),
+                 "request number is needed")
 })
 
 test_that("error generated if row_number and taxon_name are provided", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, row_number = 1,
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1,
+                                               row_number = 1,
                                                taxon_name = "holothuria"),
                  "must use only one of ")
 })
 
 test_that("error generated if row_number and ott_id are provided", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, row_number = 1,
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1,
+                                               row_number = 1,
                                                ott_id = hol_ott_id),
                  "must use only one of")
 })
@@ -40,68 +48,80 @@ test_that("error generated if row_number and ott_id are provided", {
 test_that("error generated if ott_id and taxon_name are provided", {
     skip_on_cran()
     expect_error(rotl:::check_args_match_names(rsp, taxon_name = "holothuria",
+                                               req_number = 1,
                                                ott_id = hol_ott_id),
                  "must use only one of")
 })
 
 test_that("error generated if row_number is not numeric", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, row_number = TRUE),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1,
+                                               row_number = TRUE),
                  "must be a numeric")
 })
 
 test_that("error generated if ott_id is not numeric", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, ott_id = TRUE),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               ott_id = TRUE),
                  "must look like a number")
 })
 
 test_that("error generated if taxon_name is not character", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, taxon_name = TRUE),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               taxon_name = TRUE),
                  "must be a character")
 })
 
 test_that("error generated if row_number if not one of the row", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, row_number = 10),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               row_number = 10),
                  "is not a valid row number")
-    expect_error(rotl:::check_args_match_names(rsp, row_number = 1.5),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               row_number = 1.5),
                  "is not a valid row number")
-    expect_error(rotl:::check_args_match_names(rsp, row_number = 0),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               row_number = 0),
                  "is not a valid row number")
 })
 
 test_that("error generated if invalid taxon_name", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, taxon_name = "echinodermata"),
-                 "Can't find")
-    expect_error(rotl:::check_args_match_names(rsp, taxon_name = NA_character_),
-                 "Can't find")
+    expect_true(is.na(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               taxon_name = "echinodermata")))
+    expect_true(is.na(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               taxon_name = NA_character_)))
 })
 
 test_that("error generated if invalid ott id", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, ott_id = 66666),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               ott_id = 66666),
                  "Can't find")
 })
 
 test_that("error generated if more than 1 value for row_number is provided", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, row_number = c(1, 2, 3)),
-                 "You must supply a single element")
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               row_number = c(1, 2, 3)),
+                                        #"You must supply a single element"
+                 )
 })
 
 test_that("error generated if more than 1 value for taxon_name is provided", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, taxon_name = c("holothuria", "diadema")),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               taxon_name = c("holothuria", "diadema")),
                  "You must supply a single element")
 })
 
 
 test_that("error generated if more than 1 value for ott_id is provided", {
     skip_on_cran()
-    expect_error(rotl:::check_args_match_names(rsp, ott_id = c(5004030, 4930522, 240396)),
+    expect_error(rotl:::check_args_match_names(rsp, req_number = 1L,
+                                               ott_id = c(5004030, 4930522, 240396)),
                  "only 1 element should be provided")
 })
 
@@ -112,9 +132,10 @@ test_that("error generated if more than 1 value for ott_id is provided", {
 context("inspect.match_names")
 
  if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-     rsp <- tnrs_match_names(names = c("holothuria", "diadema", "fromia"))
+     rsp <- tnrs_match_names(names = c("holothuria", "diadema", "megapterus",
+                                       "fromia", "vibrio"))
      expect_warning(rsp_na <- tnrs_match_names(names = c("diadema", "fluffy",
-                                                         "hemichordata", "escherichia")))
+                                                         "hemichordata")))
      diadema_ids <- c(4930522, 631176, 643831, 6356093, 4024672)
  }
 

@@ -88,9 +88,10 @@ tnrs_match_names <- function(names = NULL, context_name = NULL,
                           do_approximate_matching = do_approximate_matching,
                           ids = ids, include_suppressed = include_suppressed,
                           ...)
-        check_tnrs(.r)
         .r
     })
+
+    check_tnrs(res)
 
     match_ids <- lapply(res, function(.r) {
         mid <- lowest_ott_id(.r)
@@ -107,8 +108,9 @@ tnrs_match_names <- function(names = NULL, context_name = NULL,
         }, seq_along(res[[i]][["results"]]), match_ids[[i]], SIMPLIFY = FALSE)
 
         ## add taxon names with no maches
-        .smry <- add_unmatched_names(.smry, res)
+        .smry <- add_unmatched_names(.smry, req_number = i, res)
         .smry <- do.call("rbind", .smry)
+        .smry <- as.data.frame(.smry, stringsAsFactors = FALSE)
 
         .smry$search_string <- gsub("\\\\", "", .smry$search_string)
 
@@ -130,21 +132,39 @@ tnrs_match_names <- function(names = NULL, context_name = NULL,
 
     summary_match <- do.call("rbind", summary_match_list)
 
-    orig_order <- lapply(summary_match_list, function(smry)
-        as.numeric(rownames(smry)))
-    names(orig_order) <- names(res)
-
     has_original_match <- lapply(summary_match_list, function(smry) {
         !is.na(smry[["number_matches"]])
     })
 
+    has_original_match_vec <- unlist(has_original_match)
+    res_match_ids<- rep(NA_integer_, length(has_original_match_vec))
+    res_match_ids[has_original_match_vec] <- unlist(match_ids)
+
+    json_coords <- data.frame(
+        search_string = unlist(names),
+        request_number = unlist(lapply(seq_along(names), function(i)
+            rep(names(names)[i], length(names[[i]])))),
+        original_order = unlist(lapply(summary_match_list, function(smry)
+            as.numeric(rownames(smry)))),
+        match_id = res_match_ids,
+        has_original_match = has_original_match_vec,
+        row.names = seq_along(unlist(names)),
+        stringsAsFactors = FALSE
+    )
+
+    orig_order <- lapply(summary_match_list, function(smry)
+        as.numeric(rownames(smry)))
+    names(orig_order) <- names(res)
+
+
     attr(summary_match, "original_order") <- orig_order
-    rownames(summary_match) <- NULL
     attr(summary_match, "original_response") <- res
     attr(summary_match, "match_id") <- match_ids
     attr(summary_match, "has_original_match") <- has_original_match
+    attr(summary_match, "json_coords") <- json_coords
 
     class(summary_match) <- c("match_names", "data.frame")
+    rownames(summary_match) <- NULL
     summary_match
 }
 
@@ -158,11 +178,12 @@ convert_to_logical <- function(x) {
 }
 
 check_tnrs <- function(req) {
-    if (length(req$results) < 1) {
+    if (all(vapply(req, function(x) length(x$results), integer(1)) < 1)) {
         stop("No matches for any of the provided taxa")
     }
-    if (length(req[["unmatched_names"]]) > 0) {
-        warning(paste(req$unmatched_names, collapse=", "), " are not matched")
+    no_match <- lapply(req, function(x) x[["unmatched_names"]])
+    if (any(vapply(no_match, length, integer(1)) > 0)) {
+        warning(paste(unlist(no_match), collapse=", "), " are not matched")
     }
 }
 
@@ -228,10 +249,10 @@ build_empty_row <- function(x) {
     no_match_row
 }
 
-add_unmatched_names <- function(summary_row, res) {
+add_unmatched_names <- function(summary_row, req_number, res) {
     ## Add potential unmatched names
-    if (length(res[["unmatched_names"]])) {
-        no_match <- lapply(res[["unmatched_names"]], build_empty_row)
+    if (length(res[[req_number]][["unmatched_names"]])) {
+        no_match <- lapply(res[[req_number]][["unmatched_names"]], build_empty_row)
         summary_row <- c(summary_row, no_match)
     }
     summary_row
