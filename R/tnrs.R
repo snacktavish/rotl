@@ -1,4 +1,4 @@
-max_tnrs_req <- 2
+max_tnrs_req <- 250
 
 
 ##' Match taxonomic names to the Open Tree Taxonomy.
